@@ -5,3 +5,6 @@ Realized that for many personal projects in Python I was defaulting for the same
 a library/framework of sorts.
 
 Currently in alpha, less due to product reasons but more I haven't added all the code I use to style all my flask apps with here yet. 
+
+## License
+Licensed under a MIT License by Lars E. Schonander 
