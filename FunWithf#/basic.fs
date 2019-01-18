@@ -26,3 +26,9 @@ let Is3Or5 x = (x % 3 = 0 or || % 5 = 0);;
 
 let SumOf35 N = 
     List.filter Is3Or5 [1..N] |> List.sum;; 
+
+// Manhattan Distance
+type BasicPoint = {X: float; Y : float}
+
+let manhattanDistance pt1 pt2 = 
+    abs (pt1.X - pt2.X) + abs (pt1.Y - pt2.Y);;
