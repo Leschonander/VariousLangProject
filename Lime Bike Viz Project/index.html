@@ -1,0 +1,267 @@
+<html>
+    <head>
+        <script src="https://d3js.org/d3.v5.min.js"></script>
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.3.3/dist/leaflet.css"
+        integrity="sha512-Rksm5RenBEKSKFjgI3a41vrjkw4EVPlJ3+OiI65vTjIdo9brlAacEuKOiQ5OFh7cOI1bkDwLqdLw3Zg0cRJAAQ=="
+        crossorigin=""/>
+        <script src="https://unpkg.com/leaflet@1.3.3/dist/leaflet.js"
+        integrity="sha512-tAGcCfR4Sc5ZP5ZoVz0quoZDYX5aCtEm/eu1KhSLj2c9eFrylXZknQYmxUssFaVJKvvc0dJQixhGjG2yXWiV9Q=="
+        crossorigin=""></script>
+        <script src='https://npmcdn.com/@turf/turf/turf.min.js'></script>
+    </head>
+    <style type="text/css">
+        @import url('https://fonts.googleapis.com/css?family=Lato');
+        body {
+            font-family: 'Lato', sans-serif;
+            background: #fff;
+        }
+
+        header {
+            text-align: center;
+        }
+
+        .line {
+            fill: none;
+            stroke-width: 2px;
+        }
+
+        #container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-gap: 1rem;
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        #chart {
+            background: ghostwhite;
+        }
+    </style>
+    <body>
+        <header>
+            <h1>Map and Graph of Lime Bike Usage</h1>
+            <p>From the end of Dec. 2018 to ongoing...</p>
+        </header>
+        <div id='container'>
+            <div id='chart'></div>
+            <div id='map'></div>
+        </div>
+    </body>
+    <script type='text/javascript'>
+        const margin = {top: 20, right: 20, bottom: 30, left: 50}
+        const w = 600 - margin.left - margin.right;
+        const h = 400 - margin.top - margin.bottom;
+
+        let data = null // Variable to store API feed results
+
+        async function getData(url) { // Query data from Python API...
+            let response = await fetch(url)
+            let data = await response.json()
+            return data
+        }
+        getData('http://127.0.0.1:5000/')
+        .then(d => {
+            data = d
+            let bikes = data.Bikes
+            let scooters = data.Scooters
+
+                /* For the graph portion */
+            let parseTime = d3.isoParse()
+            const x = d3.scaleTime().range([0, w]);
+            const y = d3.scaleLinear().range([h, 0]);
+
+            const lineB = d3.line()
+                .x(d => x(d.Time))
+                .y(d => y(d.Amount))
+            
+            const lineS = d3.line()
+                .x(d => x(d.Time))
+                .y(d => y(d.Amount))
+            
+            const svg = d3.select("#chart").append("svg")
+            .attr('width', w + margin.left + margin.right)
+            .attr('height', h + margin.top + margin.bottom)
+            .append('g')
+            .attr('transform', `translate(${margin.left},${margin.top})`)
+
+            bikes.forEach(d => {
+                d.Time = d3.isoParse(d.Time);
+                d.Amount = +d.Amount;
+            });
+            scooters.forEach(d => {
+                d.Time = d3.isoParse(d.Time);
+                d.Amount = +d.Amount; 
+            })
+
+            x.domain(d3.extent(scooters, (d) => d.Time)) // Use the bigger value for a realistic spread
+            y.domain([0, d3.max(scooters, (d) => d.Amount)]) // ^ Could split the difference?
+
+            svg.append('path')
+                .data([bikes])
+                .attr('class', 'line')
+                .style("stroke", "grey")
+                .on('mouseover', function(){
+                    d3.select(this)
+                        .style('stroke', 'green');
+                })
+                .on('mouseout', function(){
+                    d3.select(this)
+                        .style('stroke', 'grey')
+                })
+                .attr('d', lineB)
+            
+            svg.append('path')
+                .data([scooters])
+                .attr('class', 'line')
+                .style("stroke", "grey")
+                .on('mouseover', function(){
+                    d3.select(this)
+                        .style('stroke', 'gold');
+                })
+                .on('mouseout', function(){
+                    d3.select(this)
+                        .style('stroke', 'grey')
+                })
+                .attr('d', lineS)
+            
+            svg.append('text') // Bottom label
+                .attr('transform', `translate(${w/2}, ${h + margin.top + 7.5})`)
+                .style("text-anchor", "middle")
+                .text("Date")
+
+            svg.append('g')
+                .attr('transform', `translate(0,${h})`)
+                .call(d3.axisBottom(x))
+                
+            svg.append('g')
+                .call(d3.axisLeft(y))
+            
+            svg.append('text') // Side Label
+                .attr('transform', 'rotate(-90)')
+                .attr('y', 0 - margin.left)
+                .attr('x', 0 - (h/2))
+                .attr('dy', '1em')
+                .style('text-anchor', 'middle')
+                .text('Amount')
+            // labels for lines
+            svg.append('text')
+                .attr('transform', `translate(${20}, ${y(bikes[0].Amount) - 20})`)
+                .attr('dy', '.35em')
+                .attr('text-anchor', 'start')
+                .style('fill', 'green')
+                .text('Bikes')
+            
+            svg.append('text')
+                .attr('transform', `translate(${20}, ${y(scooters[0].Amount) - 60})`)
+                .attr('dy', '.35em')
+                .attr('text-anchor', 'start')
+                .style('fill', 'gold')
+                .text('Scooters')
+
+
+            /*Map section*/
+            let bikePoints = []
+            let bikeLine = []
+            bikes.forEach(d => {
+                let lon = d.LongitudeAverage
+                let lat = d.LatitudeAverage
+                let time = d.Time
+                
+                let point = bikeLine.push([lat, lon])
+                let marker = L.marker([lat, lon]).bindPopup(`Bike | Time: ${time}`)
+                bikePoints.push(marker)
+            })
+            
+            let scooterPoints = []
+            let scooterLine = []
+            scooters.forEach(d => {
+                let lon = d.LongitudeAverage
+                let lat = d.LatitudeAverage
+                let time = d.Time
+                
+                let point = scooterLine.push([lat, lon])
+                let marker = L.marker([lat, lon]).bindPopup(`Time: ${time}`)
+                scooterPoints.push(marker)
+            })
+
+            // Polylines... 
+            let Bikepolyline = L.polyline(bikeLine, {
+                color: "yellow"
+            })
+
+            let Scooterpolyline = L.polyline(scooterLine, {
+                color: "green"
+            })
+
+            // Turf.js work...
+
+            // Layers...
+            let bikeLayer = L.layerGroup(bikePoints)
+            let scooterLayer = L.layerGroup(scooterPoints)
+
+            Bikepolyline.addTo(bikeLayer);
+            Scooterpolyline.addTo(scooterLayer);
+
+             /* Turf section */
+            let bikeTurf = []
+            let scooterTurf = []
+            for(let i = 0; i < bikes.length; i++){
+                bikeTurf.push(turf.point([bikes[i].LongitudeAverage,bikes[i].LatitudeAverage]))
+            }
+            for(let i = 0; i < scooters.length; i++){
+                scooterTurf.push(turf.point([scooters[i].LongitudeAverage,scooters[i].LatitudeAverage]))
+            }
+            
+            let BikeFeatures = turf.featureCollection(bikeTurf)
+            
+            let BikeCenter = turf.center(BikeFeatures);
+
+
+            let BikeEnveloped = turf.envelope(BikeFeatures)
+
+            let BikeArea = turf.area(BikeEnveloped)
+
+            let ScooterFeatures = turf.featureCollection(scooterTurf)
+            let ScooterCenter = turf.center(ScooterFeatures);
+
+            let ScooterEnveloped = turf.envelope(ScooterFeatures)
+
+            let ScooterArea = turf.area(ScooterEnveloped)
+
+            L.geoJSON(BikeCenter).addTo(bikeLayer);
+            L.geoJSON(ScooterCenter).addTo(scooterLayer)
+
+            L.geoJSON(BikeEnveloped).addTo(bikeLayer)
+            L.geoJSON(ScooterEnveloped).addTo(scooterLayer)
+
+
+            let tile = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        	attribution: '© OpenStreetMap'
+            })
+
+            let mymap = L.map('map', {
+                center: [38.905543, -77.007008],
+                zoom: 10,
+                layers: [bikeLayer, scooterLayer]
+            });
+
+            tile.addTo(mymap)
+            let base  = {
+                "Base": tile,
+            }
+
+            let overlay = {
+                "Bikes": bikeLayer,
+                "Scooters": scooterLayer
+            }
+
+            L.control.layers(base, overlay).addTo(mymap);
+ 
+        
+            });
+
+
+        
+
+    </script>
+</html>
